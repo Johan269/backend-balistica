@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 import cv2
 import numpy as np
+from PIL import Image
+import io
 
 app = FastAPI(title="API Balística - Comparación y Puntos Característicos")
 
@@ -14,15 +16,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+def redimensionar_imagen_bytes(file_bytes: bytes, max_width: int = 800) -> np.ndarray:
+    """Convierte los bytes de la imagen a escala de grises y la redimensiona para no saturar memoria."""
+    image = Image.open(io.BytesIO(file_bytes)).convert('L') # Convertir a grises con PIL
+    
+    # Calcular nueva escala manteniendo la relación de aspecto
+    if image.width > max_width:
+        aspect_ratio = image.height / image.width
+        new_height = int(max_width * aspect_ratio)
+        image = image.resize((max_width, new_height), Image.Resampling.LANCZOS)
+        
+    return np.array(image)
+
 def procesar_imagenes(file_a_bytes: bytes, file_b_bytes: bytes):
-    nparr_a = np.frombuffer(file_a_bytes, np.uint8)
-    nparr_b = np.frombuffer(file_b_bytes, np.uint8)
-
-    img_a = cv2.imdecode(nparr_a, cv2.IMREAD_GRAYSCALE)
-    img_b = cv2.imdecode(nparr_b, cv2.IMREAD_GRAYSCALE)
-
-    if img_a is None or img_b is None:
-        raise HTTPException(status_code=400, detail="Error al decodificar las imágenes.")
+    try:
+        img_a = redimensionar_imagen_bytes(file_a_bytes)
+        img_b = redimensionar_imagen_bytes(file_b_bytes)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error leyendo el formato de imagen: {str(e)}")
 
     sift = cv2.SIFT_create()
     kp_a, des_a = sift.detectAndCompute(img_a, None)
