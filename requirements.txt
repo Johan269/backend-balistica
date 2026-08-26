@@ -3,3 +3,4 @@ uvicorn
 opencv-python-headless
 scikit-image
 python-multipart
+Pillow
